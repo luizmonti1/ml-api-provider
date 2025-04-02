@@ -10,8 +10,8 @@ env/
 venv/
 
 # Data and logs
-data/
 external_data/
+data/
 logs/
 tests/
 config/
