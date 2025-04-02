@@ -3,59 +3,48 @@ import joblib
 from pathlib import Path
 from datetime import datetime
 
-from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import classification_report
-from sklearn.preprocessing import LabelEncoder
-
-# Project paths
+# Paths
 BASE_DIR = Path(__file__).resolve().parent.parent
-RAW_DATA = BASE_DIR / "data" / "raw" / "har_merged.parquet"
+RAW_PATH = BASE_DIR / "data" / "raw" / "har_merged.parquet"
 MODEL_DIR = BASE_DIR / "data" / "models"
-MODEL_DIR.mkdir(parents=True, exist_ok=True)
+PRED_DIR = BASE_DIR / "data" / "predictions"
+PRED_DIR.mkdir(parents=True, exist_ok=True)
 
-def load_data():
-    if not RAW_DATA.exists():
-        raise FileNotFoundError(f"Missing HAR dataset at: {RAW_DATA}")
-    df = pd.read_parquet(RAW_DATA)
+def get_latest_file(path: Path, prefix: str):
+    files = sorted(path.glob(f"{prefix}_*.pkl"), reverse=True)
+    return files[0] if files else None
+
+def load_model_and_encoder():
+    model_file = get_latest_file(MODEL_DIR, "model_har")
+    encoder_file = get_latest_file(MODEL_DIR, "labels_har")
+
+    if not model_file or not encoder_file:
+        raise FileNotFoundError("Model or label encoder not found.")
+
+    model = joblib.load(model_file)
+    encoder = joblib.load(encoder_file)
+    print(f"✅ Loaded model: {model_file.name}")
+    return model, encoder
+
+def run_predictions():
+    df = pd.read_parquet(RAW_PATH)
+    X = df.drop(columns=["subject", "activity", "activity_name", "set"])
+
+    model, encoder = load_model_and_encoder()
+    preds = model.predict(X)
+    labels = encoder.inverse_transform(preds)
+
+    df["predicted_activity"] = labels
     return df
 
-def prepare_data(df):
-    X = df.drop(columns=["subject", "activity", "activity_name", "set"])
-    y = df["activity_name"]
-
-    encoder = LabelEncoder()
-    y_encoded = encoder.fit_transform(y)
-    return X, y_encoded, encoder
-
-def train_model(X, y):
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42, stratify=y
-    )
-    model = RandomForestClassifier(n_estimators=100, random_state=42)
-    model.fit(X_train, y_train)
-
-    y_pred = model.predict(X_test)
-    print("📊 Classification Report:\n")
-    print(classification_report(y_test, y_pred))
-
-    return model
-
-def save_model(model, encoder):
+def save_predictions(df):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    model_path = MODEL_DIR / f"model_har_{timestamp}.pkl"
-    encoder_path = MODEL_DIR / f"labels_har_{timestamp}.pkl"
-
-    joblib.dump(model, model_path)
-    joblib.dump(encoder, encoder_path)
-
-    print(f"\n✅ Model saved to: {model_path}")
-    print(f"✅ Label encoder saved to: {encoder_path}")
+    out_path = PRED_DIR / f"har_predictions_{timestamp}.parquet"
+    df.to_parquet(out_path, index=False)
+    print(f"📦 Predictions saved to {out_path}")
 
 if __name__ == "__main__":
-    print("🚀 Training HAR classifier...")
-    df = load_data()
-    X, y, encoder = prepare_data(df)
-    model = train_model(X, y)
-    save_model(model, encoder)
+    print("🚀 Running HAR batch prediction...")
+    df_pred = run_predictions()
+    save_predictions(df_pred)
 

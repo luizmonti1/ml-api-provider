@@ -1,56 +1,71 @@
 import pandas as pd
 import joblib
-import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
 from pathlib import Path
 from sklearn.metrics import classification_report, confusion_matrix
 from sklearn.model_selection import train_test_split
+import matplotlib.pyplot as plt # type: ignore
+import seaborn as sns
 
+# Paths
 BASE_DIR = Path(__file__).resolve().parent.parent
-RAW_DATA = BASE_DIR / "data" / "raw" / "har_merged.parquet"
-MODEL_DIR = BASE_DIR / "data" / "models"
+RAW_PATH = BASE_DIR / "data" / "raw" / "har_merged.parquet"
+MODELS_DIR = BASE_DIR / "data" / "models"
+REPORTS_DIR = BASE_DIR / "data" / "reports"
 
-def get_latest_file(prefix: str):
-    files = sorted(MODEL_DIR.glob(f"{prefix}_*.pkl"), reverse=True)
-    return files[0] if files else None
+REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 
-def load_data():
-    df = pd.read_parquet(RAW_DATA)
-    X = df.drop(columns=["subject", "activity", "activity_name", "set"])
-    y = df["activity_name"]
-    return train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
+print("🔍 Analyzing HAR model performance...")
 
-def analyze_model():
-    X_train, X_test, y_train, y_test = load_data()
-    model = joblib.load(get_latest_file("model_har"))
-    encoder = joblib.load(get_latest_file("labels_har"))
+# Load merged dataset
+df = pd.read_parquet(RAW_PATH)
 
-    y_pred = model.predict(X_test)
-    y_pred_labels = encoder.inverse_transform(y_pred)
+# Load the latest model and label encoder
+latest_model = sorted(MODELS_DIR.glob("model_har_*.pkl"))[-1]
+latest_encoder = sorted(MODELS_DIR.glob("labels_har_*.pkl"))[-1]
 
-    print("📋 Classification Report:\n")
-    print(classification_report(y_test, y_pred_labels))
+model = joblib.load(latest_model)
+le = joblib.load(latest_encoder)
 
-    # Confusion matrix
-    cm = confusion_matrix(y_test, y_pred_labels, labels=encoder.classes_)
-    plt.figure(figsize=(10, 7))
-    sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", xticklabels=encoder.classes_, yticklabels=encoder.classes_)
-    plt.title("Confusion Matrix")
-    plt.xlabel("Predicted")
-    plt.ylabel("Actual")
-    plt.tight_layout()
-    plt.show()
+# Match feature set used during training
+X = df[model.feature_names_in_]
 
-    # Class distribution
-    plt.figure(figsize=(8, 4))
-    y_test.value_counts().plot(kind="bar", color="skyblue")
-    plt.title("True Activity Distribution (Test Set)")
-    plt.ylabel("Samples")
-    plt.xticks(rotation=45)
-    plt.tight_layout()
-    plt.show()
+# Encode labels using the same label encoder
+y = df["activity_name"]
+y = le.transform(y)
 
-if __name__ == "__main__":
-    print("🔍 Analyzing HAR model performance...")
-    analyze_model()
+# Train/test split (same as train script)
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.3, stratify=y, random_state=42
+)
+
+# Predict
+y_pred = model.predict(X_test)
+
+# Decode for readable report
+y_test_decoded = [le.classes_[i] for i in y_test]
+y_pred_decoded = [le.classes_[i] for i in y_pred]
+
+# Generate classification report
+report = classification_report(y_test_decoded, y_pred_decoded, digits=4)
+print("\n📋 Classification Report:\n")
+print(report)
+
+# Save classification report
+report_path = REPORTS_DIR / "classification_report.txt"
+with open(report_path, "w") as f:
+    f.write(report)
+print(f"✅ Report saved to: {report_path}")
+
+# Create and save confusion matrix
+cm = confusion_matrix(y_test_decoded, y_pred_decoded, labels=le.classes_)
+plt.figure(figsize=(10, 7))
+sns.heatmap(cm, annot=True, fmt="d", cmap="Blues",
+            xticklabels=le.classes_, yticklabels=le.classes_)
+plt.title("Confusion Matrix")
+plt.ylabel("True Label")
+plt.xlabel("Predicted Label")
+plt.tight_layout()
+
+cm_path = REPORTS_DIR / "confusion_matrix.png"
+plt.savefig(cm_path)
+print(f"✅ Confusion matrix saved to: {cm_path}")
