@@ -128,3 +128,9 @@ MIT — use it, learn from it, build on it, fork it into your startup.
 
 Built by [Luiz Monti](https://github.com/luizmonti1)  
 Feel free to reach out via [GitHub Issues](https://github.com/luizmonti1/ml-api-provider/issues) for questions or suggestions.
+
+# 🧠 Human Activity Recognition API
+
+![Build Time](https://img.shields.io/badge/Built%20in-Under%2024%20Hours-blueviolet?style=for-the-badge)
+
+
