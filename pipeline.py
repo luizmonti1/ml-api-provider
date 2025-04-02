@@ -1,14 +1,14 @@
 import subprocess
 from datetime import datetime
 import time
-import os
+import sys
 
 def run(script_name):
     print(f"\n🔧 Running: {script_name}")
     start = time.time()
 
     try:
-        subprocess.run(["python", f"scripts/{script_name}"], check=True)
+        subprocess.run([sys.executable, f"scripts/{script_name}"], check=True)
     except subprocess.CalledProcessError as e:
         print(f"❌ Error running {script_name}: {e}")
         return

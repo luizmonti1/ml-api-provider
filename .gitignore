@@ -8,7 +8,7 @@ __pycache__/
 .venv/
 env/
 venv/
-
+.vscode/
 # Data and logs
 external_data/
 data/
